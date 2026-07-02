@@ -114,6 +114,13 @@
   }
   button.save-btn:hover{background:#155c3d;}
   button.save-btn:active{transform:scale(.97);}
+  button.pdf-btn{
+    font-family:'Inter',sans-serif; font-size:12.5px; font-weight:600;
+    color:#fff; background:#6d28d9; border:none;
+    padding:7px 16px; border-radius:4px; cursor:pointer;
+  }
+  button.pdf-btn:hover{background:#5b21b6;}
+  button.pdf-btn:disabled{opacity:.6; cursor:default;}
   .role-badge{
     font-family:'IBM Plex Mono',monospace; font-size:10.5px; letter-spacing:.05em; text-transform:uppercase;
     padding:4px 10px; border-radius:20px; font-weight:600;
@@ -505,6 +512,7 @@
     }
   })();
 </script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 </head>
 <body>
 
@@ -528,6 +536,7 @@
     <div style="display:flex; gap:8px;">
       <button class="edit-toggle" id="editToggleBtn">Habilitar edição</button>
       <button class="save-btn" id="saveBtn" style="display:none;">💾 Salvar</button>
+      <button class="pdf-btn" id="pdfBtn">📄 Exportar PDF</button>
     </div>
   </div>
 
@@ -1220,6 +1229,123 @@ async function init(){
   render();
   applyMode();
 }
+
+// ===== EXPORTAR PDF =====
+document.getElementById('pdfBtn').addEventListener('click', async ()=>{
+  const btn = document.getElementById('pdfBtn');
+  btn.textContent = '⏳ Gerando PDF…';
+  btn.disabled = true;
+
+  const hoje = new Date().toLocaleDateString('pt-BR');
+
+  // Monta HTML limpo para o PDF
+  let html = `
+    <div style="font-family:Georgia,serif; color:#0c1f33; padding:20px;">
+      <div style="border-bottom:3px solid #0c1f33; padding-bottom:14px; margin-bottom:20px;">
+        <div style="font-size:11px; text-transform:uppercase; letter-spacing:.1em; color:#0b6359; font-weight:700; margin-bottom:6px;">Secretaria de Estado da Economia · Goiás</div>
+        <div style="font-size:22px; font-weight:700; margin-bottom:4px;">Reforma Tributária sobre o Consumo</div>
+        <div style="font-size:11px; color:#52514c;">Gerado em ${hoje} · Gerência de Representação no CONFAZ e de Relações Federativas</div>
+      </div>
+
+      <div style="margin-bottom:24px;">
+        <div style="font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; background:#f0f4f0; padding:10px 14px; border-bottom:1px solid #d4d0c8; margin-bottom:0;">Visão Geral por Tema</div>
+        <table style="width:100%; border-collapse:collapse; font-size:11px;">
+          <thead>
+            <tr style="background:#0c1f33; color:#fff;">
+              <th style="padding:8px 10px; text-align:left;">#</th>
+              <th style="padding:8px 10px; text-align:left;">Tema</th>
+              <th style="padding:8px 10px; text-align:center;">Tarefas</th>
+              <th style="padding:8px 10px; text-align:center;">% Conclusão</th>
+              <th style="padding:8px 10px; text-align:left;">Data Últ. Atualização</th>
+              <th style="padding:8px 10px; text-align:left;">Descrição Últ. Atualização</th>
+            </tr>
+          </thead>
+          <tbody>
+  `;
+
+  DATA.themes.forEach((theme, idx)=>{
+    const st = themeStats(theme);
+    const bg = idx % 2 === 0 ? '#fff' : '#f8f9fa';
+    const pct = fmtPct(st.avg);
+    const lastUpdShort = st.lastUpd ? (st.lastUpd.length > 80 ? st.lastUpd.substring(0,80)+'…' : st.lastUpd) : '—';
+    html += `
+      <tr style="background:${bg}; border-bottom:1px solid #e5e7eb;">
+        <td style="padding:7px 10px;">${theme.id}</td>
+        <td style="padding:7px 10px; font-weight:700;">${theme.name}</td>
+        <td style="padding:7px 10px; text-align:center;">${st.done}/${st.total}</td>
+        <td style="padding:7px 10px; text-align:center; font-weight:700;">${pct}</td>
+        <td style="padding:7px 10px; font-family:monospace;">${st.lastUpdDate || '—'}</td>
+        <td style="padding:7px 10px;">${lastUpdShort}</td>
+      </tr>`;
+  });
+
+  html += `</tbody></table></div>`;
+
+  // Detalhe de cada tema
+  DATA.themes.forEach(theme=>{
+    html += `
+      <div style="margin-bottom:24px; page-break-inside:avoid;">
+        <div style="background:#0c1f33; color:#fff; padding:10px 14px; margin-bottom:8px;">
+          <span style="color:#c08b30; font-size:11px; font-weight:700; margin-right:10px;">TEMA ${theme.id}</span>
+          <span style="font-size:15px; font-weight:700;">${theme.name}</span>
+        </div>`;
+
+    theme.tasks.forEach(task=>{
+      const pct = Math.round((task.pct||0)*100);
+      html += `
+        <div style="border:1px solid #d4d0c8; border-radius:6px; margin-bottom:10px; overflow:hidden; page-break-inside:avoid;">
+          <div style="background:#f2f5f2; padding:8px 12px; display:flex; align-items:center; gap:10px; border-bottom:1px solid #d4d0c8;">
+            <span style="background:#1b3a5c; color:#fff; font-size:10px; font-weight:700; padding:2px 8px; border-radius:3px;">${task.id}</span>
+            <span style="font-size:13px; font-weight:700; color:#0c1f33;">${task.title || task.desc || '—'}</span>
+            <span style="margin-left:auto; font-size:11px; font-weight:700; color:${pct>=90?'#1f7a52':pct>=60?'#5c9a4c':pct>=30?'#c0a02b':pct>0?'#d98a2b':'#e5532c'}">${pct}%</span>
+          </div>
+          <div style="padding:10px 12px; font-size:11px;">
+            ${task.desc ? `<div style="margin-bottom:8px; color:#52514c;">${task.desc}</div>` : ''}
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:8px;">
+              <div><span style="font-size:9px; text-transform:uppercase; letter-spacing:.06em; color:#b45309; font-weight:700;">Prazo máximo</span><br>${task.prazo||'—'}</div>
+              <div><span style="font-size:9px; text-transform:uppercase; letter-spacing:.06em; color:#1d4ed8; font-weight:700;">Processo SEI</span><br>${task.sei||'—'}</div>
+              <div><span style="font-size:9px; text-transform:uppercase; letter-spacing:.06em; color:#6d28d9; font-weight:700;">Origem</span><br>${task.nota||'—'}</div>
+              <div><span style="font-size:9px; text-transform:uppercase; letter-spacing:.06em; color:#15803d; font-weight:700;">Áreas envolvidas</span><br>${task.areas||'—'}</div>
+            </div>
+            ${(task.updates||[]).length > 0 ? `
+              <div style="border-top:1px dashed #d4d0c8; padding-top:8px;">
+                <div style="font-size:9px; text-transform:uppercase; letter-spacing:.06em; font-weight:700; margin-bottom:6px; color:#52514c;">Histórico de Atualizações</div>
+                ${task.updates.map(u=>`
+                  <div style="margin-bottom:5px; padding:5px 8px; background:#f8f9fa; border-left:3px solid #0c1f33; border-radius:2px;">
+                    <span style="font-family:monospace; font-size:10px; font-weight:700; color:#1b3a5c; margin-right:8px;">${u.date||''}</span>
+                    <span style="font-size:10px;">${u.text||''}</span>
+                  </div>`).join('')}
+              </div>` : ''}
+          </div>
+        </div>`;
+    });
+
+    html += `</div>`;
+  });
+
+  html += `</div>`;
+
+  const opt = {
+    margin: [12, 10, 12, 10],
+    filename: `Reforma-Tributaria-GO-${hoje.replace(/\//g,'-')}.pdf`,
+    image: { type:'jpeg', quality:0.97 },
+    html2canvas: { scale:2, useCORS:true },
+    jsPDF: { unit:'mm', format:'a4', orientation:'portrait' },
+    pagebreak: { mode:['avoid-all','css'] }
+  };
+
+  const el = document.createElement('div');
+  el.innerHTML = html;
+  document.body.appendChild(el);
+
+  try {
+    await html2pdf().set(opt).from(el).save();
+  } finally {
+    document.body.removeChild(el);
+    btn.textContent = '📄 Exportar PDF';
+    btn.disabled = false;
+  }
+});
 
 init();
 </script>
